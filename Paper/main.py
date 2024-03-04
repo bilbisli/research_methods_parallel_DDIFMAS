@@ -46,7 +46,7 @@ def adjacency_matrix(A):
 def generate_traces(G, noa, nor):
     T = []
     # let networkx return the adjacency matrix A
-    A = nx.adj_matrix(G)
+    A = nx.adjacency_matrix(G)
     A = A.todense()
     A = np.array(A, dtype=np.float64)
     A = adjacency_matrix(A)
