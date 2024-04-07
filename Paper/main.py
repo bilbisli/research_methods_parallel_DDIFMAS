@@ -8,7 +8,8 @@ import algorithms
 import numpy as np
 from random import randrange
 
-def create_random_graph(noa):
+
+def create_random_graph(noa, to_show=True):
     # use erdos-renyi algorithm to generate random graph
     G = nx.erdos_renyi_graph(noa, 0.5, seed=123, directed=False)
     # make sure it is connected graph
@@ -17,10 +18,12 @@ def create_random_graph(noa):
     while not connected:
         G = nx.erdos_renyi_graph(noa, 0.5, seed=123, directed=False)
         connected = nx.is_connected(G)
-    # plot the graph
-    nx.draw(G, with_labels=True, font_weight='bold')
-    plt.show()
+    if to_show:
+        # plot the graph
+        nx.draw(G, with_labels=True, font_weight='bold')
+        plt.show()
     return G
+
 
 def choose_faulty_agents(noa, nof):
     # generate an ordered list of the agents (their numbers)
@@ -30,6 +33,7 @@ def choose_faulty_agents(noa, nof):
     # choose the first number of faulty agents from the list to be faulty
     F = F[:nof]
     return F
+
 
 def adjacency_matrix(A):
     # build an adjacency list for each node
@@ -42,6 +46,7 @@ def adjacency_matrix(A):
             if c == 1:
                 res_A[i].append(j)
     return res_A
+
 
 def generate_traces(G, noa, nor):
     T = []
@@ -70,11 +75,13 @@ def generate_traces(G, noa, nor):
         T.append(trace)
     return T
 
+
 def no_failing_rows(S):
     for row in S:
         if row[-1] == 1:
             return False
     return True
+
 
 def generate_spectrum(noa, nor, afp, F, T):
     # create an empty (with 2's) spectrum
@@ -97,13 +104,14 @@ def generate_spectrum(noa, nor, afp, F, T):
         trace_success_probability = 1.0
         for j in range(len(run[:-1])):
             if run[j] == 1 and j in F:
-                trace_success_probability *= (1-afp)
+                trace_success_probability *= (1 - afp)
         rnd = random.random()
         if rnd > trace_success_probability:
             run[-1] = 1
     return S
 
-def write_data_to_excel(data):
+
+def write_data_to_excel(data, results_file='results.xlsx'):
     columns = [
         {'header': 'instance_number'},
         {'header': 'noa'},
@@ -166,12 +174,14 @@ def write_data_to_excel(data):
         {'header': 'Weighted Recall 100'}
     ]
     # write the data to xlsx file
-    workbook = xlsxwriter.Workbook('results.xlsx')
+    workbook = xlsxwriter.Workbook(results_file)
     worksheet = workbook.add_worksheet('results')
     worksheet.add_table(0, 0, len(data), len(columns) - 1, {'data': data, 'columns': columns})
     workbook.close()
 
-def run_random_experiments(number_of_agents, number_of_faulty, agent_fault_probabilities, number_of_runs, number_of_instances, s_time):
+
+def run_random_experiments(number_of_agents, number_of_faulty, agent_fault_probabilities, number_of_runs,
+                           number_of_instances, s_time, results_file='results.xlsx'):
     t_report = []
     results = []
     noa_l = len(number_of_agents)
@@ -180,68 +190,89 @@ def run_random_experiments(number_of_agents, number_of_faulty, agent_fault_proba
     nor_l = len(number_of_runs)
     noi_l = number_of_instances
     total_instances = noa_l * nof_l * afp_l * nor_l * noi_l
-    for noa_i, noa in enumerate(number_of_agents):
-        G = create_random_graph(noa)
-        result_rows = 0
-        for nof_i, nof in enumerate(number_of_faulty):
-            F = choose_faulty_agents(noa, nof)
-            F.sort()
-            for afp_i, afp in enumerate(agent_fault_probabilities):
-                for nor_i, nor in enumerate(number_of_runs):
-                    for inum in range(number_of_instances):
-                        instance_num = noa_i * (nof_l * afp_l * nor_l * noi_l) + nof_i * (afp_l * nor_l * noi_l) + afp_i * (nor_l * noi_l) + nor_i * noi_l + inum + 1
-                        T = generate_traces(G, noa, nor)
-                        S = generate_spectrum(noa, nor, afp, F, T)
-                        while no_failing_rows(S):
+    try:
+        for noa_i, noa in enumerate(number_of_agents):
+            G = create_random_graph(noa, to_show=False)
+            result_rows = 0
+            for nof_i, nof in enumerate(number_of_faulty):
+                F = choose_faulty_agents(noa, nof)
+                F.sort()
+                for afp_i, afp in enumerate(agent_fault_probabilities):
+                    for nor_i, nor in enumerate(number_of_runs):
+                        for inum in range(number_of_instances):
+                            instance_num = noa_i * (nof_l * afp_l * nor_l * noi_l) + nof_i * (
+                                        afp_l * nor_l * noi_l) + afp_i * (nor_l * noi_l) + nor_i * noi_l + inum + 1
                             T = generate_traces(G, noa, nor)
                             S = generate_spectrum(noa, nor, afp, F, T)
-                        print(f'running instance {instance_num}/{total_instances} ({inum+1}/{number_of_instances}) with:')
-                        print(f'        - number of agents: {noa} ({noa_i+1}/{noa_l})')
-                        print(f'        - number of faulty agents: {nof} ({nof_i+1}/{nof_l})')
-                        print(f'        - agent fault probability: {afp} ({afp_i+1}/{afp_l})')
-                        print(f'        - number of runs: {nor} ({nor_i + 1}/{nor_l})')
-                        try:
-                            result_coef = algorithms.COEF(instance_num, noa, nof, afp, nor, inum + 1, F, S)
-                            result_dcoefI1D4R2 = algorithms.DCOEF_I1D4R2(instance_num, noa, nof, afp, nor, inum + 1, F, S)
-                            result_mrsd = algorithms.MRSD(instance_num, noa, nof, afp, nor, inum + 1, F, S)
-                            result_dmrsdI1D1R1 = algorithms.DMRSD_I1D1R1(instance_num, noa, nof, afp, nor, inum + 1, F, S)
-                            result_dmrsdI1D2R1 = algorithms.DMRSD_I1D2R1(instance_num, noa, nof, afp, nor, inum + 1, F, S)
-                            result_dmrsdI1D3R1 = algorithms.DMRSD_I1D3R1(instance_num, noa, nof, afp, nor, inum + 1, F, S)
-                            results += result_coef
-                            result_rows += 1
-                            results += result_dcoefI1D4R2
-                            result_rows += 1
-                            results += result_mrsd
-                            result_rows += 1
-                            results += result_dmrsdI1D1R1
-                            result_rows += 1
-                            results += result_dmrsdI1D2R1
-                            result_rows += 1
-                            results += result_dmrsdI1D3R1
-                            result_rows += 1
-                        except Exception as e:
-                            print(f'\n\n\n#####################################################################')
-                            print(f'#####################################################################')
-                            print(f'#####################################################################')
-                            print(f'########################### Exception! ##############################')
-                            print(type(e))
-                            print(e.args)
-                            print(e)
-                            print(f'instance_num: {instance_num}\n')
-                            print(f'noa: {noa}\n')
-                            print(f'nof: {nof}\n')
-                            print(f'afp: {afp}\n')
-                            print(f'nor: {nor}\n')
-                            print(f'inum + 1: {inum + 1}\n')
-                            print(f'F: {F}\n')
-                            Sstring = ',\r\n'.join(list(map(lambda arr: str(arr), S)))
-                            print(f'S:\n{Sstring}\n')
-                            raise
-        e_time = datetime.now()
-        d = e_time - s_time
-        t_report.append(f'number of agents {noa}: {result_rows} rows, {d}')
-        s_time = datetime.now()
-    write_data_to_excel(results)
+                            while no_failing_rows(S):
+                                T = generate_traces(G, noa, nor)
+                                S = generate_spectrum(noa, nor, afp, F, T)
+                            print(
+                                f'running instance {instance_num}/{total_instances} ({inum + 1}/{number_of_instances}) with:')
+                            print(f'        - number of agents: {noa} ({noa_i + 1}/{noa_l})')
+                            print(f'        - number of faulty agents: {nof} ({nof_i + 1}/{nof_l})')
+                            print(f'        - agent fault probability: {afp} ({afp_i + 1}/{afp_l})')
+                            print(f'        - number of runs: {nor} ({nor_i + 1}/{nor_l})')
+                            try:
+                                parallel_DMRSD_I1D1R1_result = []
+                                result_dmrsdI1D1R1 = []
+                                try:
+                                    # result_coef = algorithms.COEF(instance_num, noa, nof, afp, nor, inum + 1, F, S)
+                                    # result_dcoefI1D4R2 = algorithms.DCOEF_I1D4R2(instance_num, noa, nof, afp, nor, inum + 1, F, S)
+                                    # result_mrsd = algorithms.MRSD(instance_num, noa, nof, afp, nor, inum + 1, F, S)
+                                    result_dmrsdI1D1R1 = algorithms.DMRSD_I1D1R1(instance_num, noa, nof, afp, nor, inum + 1, F,
+                                                                                 S)
+                                    parallel_DMRSD_I1D1R1_result = algorithms.parallel_DMRSD_I1D1R1(instance_num, noa,
+                                                                                                    nof, afp,
+                                                                                                    nor, inum + 1, F, S)
+                                    # result_dmrsdI1D2R1 = algorithms.DMRSD_I1D2R1(instance_num, noa, nof, afp, nor, inum + 1, F, S)
+                                    # result_dmrsdI1D3R1 = algorithms.DMRSD_I1D3R1(instance_num, noa, nof, afp, nor, inum + 1, F, S)
+                                except KeyboardInterrupt:
+                                    print('KeyboardInterrupt during algorithm runs')
+                                    results += result_dmrsdI1D1R1
+                                    result_rows += 1
+                                    results += parallel_DMRSD_I1D1R1_result
+                                    result_rows += 1
+                                    raise
+                                # results += result_coef
+                                # result_rows += 1
+                                # results += result_dcoefI1D4R2
+                                # result_rows += 1
+                                # results += result_mrsd
+                                # result_rows += 1
+                                results += result_dmrsdI1D1R1
+                                result_rows += 1
+                                results += parallel_DMRSD_I1D1R1_result
+                                result_rows += 1
+                                # results += result_dmrsdI1D2R1
+                                # result_rows += 1
+                                # results += result_dmrsdI1D3R1
+                                # result_rows += 1
+                            except Exception as e:
+                                print(f'\n\n\n#####################################################################')
+                                print(f'#####################################################################')
+                                print(f'#####################################################################')
+                                print(f'########################### Exception! ##############################')
+                                print(type(e))
+                                print(e.args)
+                                print(e)
+                                print(f'instance_num: {instance_num}\n')
+                                print(f'noa: {noa}\n')
+                                print(f'nof: {nof}\n')
+                                print(f'afp: {afp}\n')
+                                print(f'nor: {nor}\n')
+                                print(f'inum + 1: {inum + 1}\n')
+                                print(f'F: {F}\n')
+                                Sstring = ',\r\n'.join(list(map(lambda arr: str(arr), S)))
+                                print(f'S:\n{Sstring}\n')
+                                raise
+            e_time = datetime.now()
+            d = e_time - s_time
+            t_report.append(f'number of agents {noa}: {result_rows} rows, {d}')
+            s_time = datetime.now()
+    except KeyboardInterrupt as e:
+        print(f'KeyboardInterrupt before data save: {e}')
+    write_data_to_excel(results, results_file)
     print(9)
     return t_report
 
@@ -257,15 +288,22 @@ if __name__ == '__main__':
     # number_of_runs_list = [10, 20, 30, 40, 50]
     # number_of_instances_list = 30
 
-    number_of_agents_list = [8]
-    number_of_faulty_list = [5]
-    agent_fault_probabilities_list = [0.9]
-    number_of_runs_list = [50]
-    number_of_instances_list = 30
+    # number_of_agents_list = [8]
+    # number_of_faulty_list = [5]
+    # agent_fault_probabilities_list = [0.9]
+    # number_of_runs_list = [50]
+    # number_of_instances_list = 30
+
+    number_of_agents_list = [14, 15, 16, 17, 18, 19, 20, 21]
+    number_of_faulty_list = [1, 3, 4, 6]
+    agent_fault_probabilities_list = [0.2, 0.5, 0.8]
+    number_of_runs_list = [10]
+    number_of_instances_list = 6
 
     # run_random_experiments([5, 6, 7, 8, 9], [1, 2, 3, 4, 5], [10, 20, 30, 40, 50], 10)
     time_report = run_random_experiments(number_of_agents_list, number_of_faulty_list, agent_fault_probabilities_list,
-                                         number_of_runs_list, number_of_instances_list, start_time)
+                                         number_of_runs_list, number_of_instances_list, start_time,
+                                         results_file=f'results_parallel_dmrsdI1D1R1_8_to_21.xlsx')
 
     end_time = datetime.now()
     delta = end_time - start_time
